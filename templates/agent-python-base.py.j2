@@ -34,7 +34,7 @@ from logging.handlers import RotatingFileHandler
 ############################################################
 ## Agent will start with this name
 ############################################################
-agent_name='auto_config_agent'
+agent_name='{{ agent_name }}'
 
 ############################################################
 ## Open a GRPC channel to connect to sdk_mgr on the dut
@@ -93,13 +93,10 @@ def Subscribe_Notifications(stream_id):
     # Subscribe to config changes, first
     Subscribe(stream_id, 'cfg')
 
-    Subscribe(stream_id, 'bfd')  # Test
+    Subscribe(stream_id, 'bfd')  # BFD notifications
 
     # To map route notifications to BGP peers
     Subscribe(stream_id, 'nexthop_group')
-
-    ##Subscribe to LLDP Neighbor Notifications -> moved
-    ## Subscribe(stream_id, 'lldp')
 
 ############################################################
 ## Function to populate state of agent config
@@ -190,90 +187,20 @@ def Handle_Notification(obj, state):
             else:
                 json_acceptable_string = obj.config.data.json.replace("'", "\"")
                 data = json.loads(json_acceptable_string)
-                if 'role' in data:
-                    state.role = data['role']
-                    logging.info(f"Got role :: {state.role}")
-                if 'peerlinks_prefix' in data:
-                    state.peerlinks_prefix = data['peerlinks_prefix']['value']
-                    state.peerlinks = list(ipaddress.ip_network(data['peerlinks_prefix']['value']).subnets(new_prefix=31))
-                if 'loopbacks_prefix' in data:
-                    state.loopbacks = list(ipaddress.ip_network(data['loopbacks_prefix']['value']).subnets(new_prefix=32))
-                if 'base_as' in data:
-                    state.base_as = int( data['base_as']['value'] )
-                if 'max_spines' in data:
-                    state.max_spines = int( data['max_spines']['value'] )
-                if 'max_leaves' in data:
-                    state.max_leaves = int( data['max_leaves']['value'] )
-                if 'monitor' in data:
-                  _d = data['monitor']
-                  if 'flaps_per_period_threshold' in _d:
-                    state.flap_threshold = int( _d['flaps_per_period_threshold']['value'] )
-                  if 'flaps_monitoring_period' in _d:
-                    state.flap_period_mins = int( _d['flaps_monitoring_period']['value'] )
-                  if 'max_flaps_history' in _d:
-                    state.max_flaps_history = int( _d['max_flaps_history']['value'] )
-
-                # Update flap count assesments for each peer
-                logging.info( f'Updating BFD flapcounts after new hourly threshold: {state.flap_threshold}' )
-                Update_Global_State( state, "total_bfd_flaps_last_period",
-                  sum( [len(f) for f in state.bfd_flaps.values()] ) )
-                for peer_ip in state.bfd_flaps.keys():
-                    Update_BFDFlapcounts( state, peer_ip )
+                if 'sample_param' in data:
+                    state.sample_param = data['sample_param']
+                    logging.info(f"Got sample_param :: {state.sample_param}")
 
                 return not state.role is None
 
-    elif obj.HasField('lldp_neighbor') and not state.role is None:
+    elif obj.HasField('lldp_neighbor'):
         # Update the config based on LLDP info, if needed
         logging.info(f"process LLDP notification : {obj}")
         my_port = obj.lldp_neighbor.key.interface_name  # ethernet-1/x
         to_port = obj.lldp_neighbor.data.port_id
         peer_sys_name = obj.lldp_neighbor.data.system_name
 
-        if my_port != 'mgmt0' and to_port != 'mgmt0' and hasattr(state,'peerlinks'):
-          my_port_id = re.split("/",re.split("-",my_port)[1])[1]
-          m = re.match("^ethernet-(\d+)/(\d+)$", to_port)
-          if m:
-            to_port_id = m.groups()[1]
-          else:
-            to_port_id = my_port_id  # FRR Linux host or other element not sending port name
-
-          # For spine-spine connections, build iBGP
-          if (state.role == 'ROLE_spine') and 'spine' not in peer_sys_name:
-            _r = 0
-            link_index = state.max_spines * (int(to_port_id) - 1) + int(my_port_id) - 1
-          else:
-            _r = 1
-            link_index = state.max_spines * (int(my_port_id) - 1) + int(to_port_id) - 1
-
-          router_id_changed = False
-          if m and not hasattr(state,"router_id"): # Only for valid to_port, if not set
-            state.router_id = f"1.1.{ 0 if state.role == 'ROLE_spine' else 1 }.{to_port_id}"
-            router_id_changed = True
-
-          # Configure IP on interface and BGP for leaves
-          link_name = f"link{link_index}"
-          if not hasattr(state,link_name):
-             _ip = str( list(state.peerlinks[link_index].hosts())[_r] )
-             _peer = str( list(state.peerlinks[link_index].hosts())[1-_r] )
-             script_update_interface(
-                 'spine' if state.role == 'ROLE_spine' else 'leaf',
-                 my_port,
-                 _ip + '/31',
-                 obj.lldp_neighbor.data.system_description if m else 'host',
-                 _peer if _r==1 else '*',
-                 state.base_as + (int(to_port_id) if state.role != 'ROLE_spine' else 0),
-                 state.router_id if router_id_changed else "",
-                 state.base_as if (state.role == 'ROLE_leaf') else state.base_as + 1,
-                 state.base_as if (state.role == 'ROLE_leaf') else state.base_as + state.max_leaves,
-                 state.peerlinks_prefix
-             )
-             setattr( state, link_name, _ip )
-             state_update = {
-               "status" : { "value" : "Awaiting BFD from: " + obj.lldp_neighbor.data.system_description },
-               "flaps_last_period" : 0,
-               "flaps_history" : { "value" : "none yet" }
-             }
-             Update_Peer_State( _peer, 'bfd', state_update )
+        # TODO process
 
     elif obj.HasField('bfd_session'):
         logging.info(f"process BFD notification : {obj}")
@@ -286,7 +213,7 @@ def Handle_Notification(obj, state):
         dst_ip_str = ipaddress.ip_address(dst_ip_addr).__str__()
         logging.info(f"BFD : src={src_ip_str} dst={dst_ip_str} status={status}")
 
-        Update_BFDFlapcounts( state, dst_ip_str, status )
+        # TODO process
     else:
         logging.info(f"Unexpected notification : {obj}")
 
@@ -368,30 +295,24 @@ def get_app_id(app_name):
     return app_id_response.id
 
 ###########################
-# JvB: Invokes gnmic client to update interface configuration, via bash script
+# Invokes gnmic client to update router configuration, via bash script
 ###########################
-def script_update_interface(role,name,ip,peer,peer_ip,_as,router_id,peer_as_min,peer_as_max,peer_links):
-    logging.info(f'Calling update script: role={role} name={name} ip={ip} peer_ip={peer_ip} peer={peer} as={_as} ' +
-                 f'router_id={router_id} peer_links={peer_links}' )
+def script_update_config(some_param):
+    logging.info(f'Calling update script: some_param={some_param}' )
     try:
-       script_proc = subprocess.Popen(['/etc/opt/srlinux/appmgr/gnmic-configure-interface.sh',
-                                       role,name,ip,peer,peer_ip,str(_as),router_id,
-                                       str(peer_as_min),str(peer_as_max),peer_links],
+       script_proc = subprocess.Popen(['/etc/opt/srlinux/appmgr/script-to-be-built.sh',
+                                       some_param ],
                                        stdout=subprocess.PIPE, stderr=subprocess.PIPE)
        stdoutput, stderroutput = script_proc.communicate()
-       logging.info(f'script_update_interface result: {stdoutput} err={stderroutput}')
+       logging.info(f'script_update_config result: {stdoutput} err={stderroutput}')
     except Exception as e:
-       logging.error(f'Exception caught in script_update_interface :: {e}')
+       logging.error(f'Exception caught in script_update_config :: {e}')
 
 class State(object):
     def __init__(self):
         self.role = None       # May not be set in config
-        self.bfd_flaps = {}    # Indexed by peer IP
-        self.nhg_map = {}      # Map of nhg_id -> peer IP
-        self.owner_id_map = {} # Map of owner_id (from add route) -> peer IP
-        self.route_flaps = {}  # Indexed by next hop IP
-        self.flap_period_mins = 60 # Make sure this is defined
-        self.max_flaps_history = 0
+        
+        # TODO more properties
 
     def __str__(self):
         return str(self.__class__) + ": " + str(self.__dict__)
@@ -487,7 +408,7 @@ if __name__ == '__main__':
     signal.signal(signal.SIGTERM, Exit_Gracefully)
     if not os.path.exists(stdout_dir):
         os.makedirs(stdout_dir, exist_ok=True)
-    log_filename = '{}/auto_config_agent.log'.format(stdout_dir)
+    log_filename = '{}/{{ agent_name }}.log'.format(stdout_dir)
     logging.basicConfig(filename=log_filename, filemode='a',\
                         format='%(asctime)s,%(msecs)d %(name)s %(levelname)s %(message)s',\
                         datefmt='%H:%M:%S', level=logging.INFO)
