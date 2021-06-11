@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # coding=utf-8
 
-import os, sys, getopt
+import os, sys, getopt, re
 from jinja2 import Environment, FileSystemLoader
 from pathlib import Path
 
@@ -11,18 +11,23 @@ def main(argv):
    try:
       opts, args = getopt.getopt(argv,"hn:o:",["name=","outputfolder="])
    except getopt.GetoptError:
-      print 'build_agent.py -n <agentname> -o <outputfolder>'
+      print( 'build_agent.py -n <agentname> -o <outputfolder>' )
       sys.exit(2)
    for opt, arg in opts:
       if opt == '-h':
-         print 'build_agent.py -n <agentname> -o <outputfolder>'
+         print( 'build_agent.py -n <agentname> -o <outputfolder>' )
          sys.exit()
-     elif opt in ("-n", "--name"):
+      elif opt in ("-n", "--name"):
          agent_name = arg
-     elif opt in ("-o", "--outputfolder"):
+      elif opt in ("-o", "--outputfolder"):
          output_folder = arg
-   print 'Agent name: "', agent_name
-   print 'Output folder is "', output_folder
+
+   if (agent_name==""):
+       print( 'Missing mandatory agent name' )
+       sys.exit(3)
+
+   print( f'Agent name: {agent_name}' )
+   print( f'Output folder is {output_folder}' )
 
    env = Environment(loader=FileSystemLoader('templates'))
    templates = os.listdir('templates')
@@ -31,7 +36,12 @@ def main(argv):
 
    for t in templates:
      template = env.get_template(t)
-     template.stream(agent_name=agent_name).dump( output_folder + '/' + t[:-3]) # Remove ".j2" from name
+     ext = re.match("^.*(\..*)\.j2$",t)
+     if ext:
+       filename = agent_name + ext.groups()[0]
+     else:
+       filename = t[0:-3] # remove ".j2"
+     template.stream(agent_name=agent_name).dump( output_folder + '/' + filename )
 
 if __name__ == "__main__":
    main(sys.argv[1:])
