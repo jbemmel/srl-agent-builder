@@ -43,7 +43,7 @@ module {{ agent_name }} {
                 type uint64;
                 config false;
             }
-            
+
             // Sample list of peers
             list peer {
                 key peer-ip;
@@ -76,5 +76,5 @@ module {{ agent_name }} {
     }
 
     // data definition statements
-    uses auto-config-agent-top;
+    uses {{ agent_name }}-top;
 }
