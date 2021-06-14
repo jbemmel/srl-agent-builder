@@ -32,15 +32,15 @@ def main(argv):
    env = Environment(loader=FileSystemLoader('templates'))
    templates = os.listdir('templates')
 
-   Path(output_folder).mkdir(parents=True, exist_ok=True)
+   Path(output_folder+'/appmgr').mkdir(parents=True, exist_ok=True)
 
    for t in templates:
      template = env.get_template(t)
      ext = re.match("^.*(\..*)\.j2$",t)
      if ext:
-       filename = agent_name + ext.groups()[0]
+       filename = 'appmgr/' + agent_name + ext.groups()[0]
      else:
-       filename = t[0:-3] # remove ".j2"
+       filename = t[0:-3] # remove ".j2", Dockerfile and Makefile
      template.stream(agent_name=agent_name).dump( output_folder + '/' + filename )
 
 if __name__ == "__main__":
