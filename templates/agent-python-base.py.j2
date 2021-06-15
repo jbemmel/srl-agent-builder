@@ -34,7 +34,7 @@ from logging.handlers import RotatingFileHandler
 ############################################################
 ## Agent will start with this name
 ############################################################
-agent_name='{{ agent_name }}'
+agent_name='{{ agent_name | replace('-','_') }}'
 
 ############################################################
 ## Open a GRPC channel to connect to sdk_mgr on the dut
@@ -311,7 +311,7 @@ def script_update_config(some_param):
 class State(object):
     def __init__(self):
         self.role = None       # May not be set in config
-        
+
         # TODO more properties
 
     def __str__(self):
