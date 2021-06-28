@@ -7,7 +7,15 @@ RUN sudo curl -sL https://github.com/karimra/gnmic/releases/download/v0.14.1/gnm
 # Add a binary from another image
 # COPY --from=paris-traceroute /usr/local/bin/paris-* /usr/local/bin/
 
-COPY 42_sr_copy_custom_appmgr.sh /opt/srlinux/bin/bootscript/
+# COPY 42_sr_copy_custom_appmgr.sh /opt/srlinux/bin/bootscript/
+RUN printf '%s\n' \
+  '#!/bin/bash' \
+  '' \
+  'mkdir -p /etc/opt/srlinux/appmgr && cp /home/appmgr/* /etc/opt/srlinux/appmgr/' \
+  'exit $?' \
+  \
+> /tmp/42.sh && sudo mv /tmp/42.sh /opt/srlinux/bin/bootscript/42_sr_copy_custom_appmgr.sh && \
+  chmod a+x /opt/srlinux/bin/bootscript/42_sr_copy_custom_appmgr.sh
 
 # COPY ./appmgr/ /etc/opt/srlinux/appmgr/ # doesn't work, using a script to copy at runtime
 COPY ./appmgr/ /home/appmgr
