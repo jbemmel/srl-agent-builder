@@ -284,16 +284,6 @@ def Update_Flapcounts(state,now,peer_ip,status,flapmap,period_mins):
     flapmap[peer_ip] = keep_flaps
     return len( keep_flaps ), keep_history
 
-##################################################################################################
-## This functions get the app_id from idb for a given app_name
-##################################################################################################
-def get_app_id(app_name):
-    logging.info(f'Metadata {metadata} ')
-    appId_req = sdk_service_pb2.AppIdRequest(name=app_name)
-    app_id_response=stub.GetAppId(request=appId_req, metadata=metadata)
-    logging.info(f'app_id_response {app_id_response.status} {app_id_response.id} ')
-    return app_id_response.id
-
 ###########################
 # Invokes gnmic client to update router configuration, via bash script
 ###########################
@@ -329,13 +319,6 @@ def Run():
     # optional agent_liveliness=<seconds> to have system kill unresponsive agents
     response = stub.AgentRegister(request=sdk_service_pb2.AgentRegistrationRequest(), metadata=metadata)
     logging.info(f"Registration response : {response.status}")
-
-    app_id = get_app_id(agent_name)
-    if not app_id:
-        logging.error(f'idb does not have the appId for {agent_name} : {app_id}')
-        sys.exit(-1) # Restart agent -> retry
-    else:
-        logging.info(f'Got appId {app_id} for {agent_name}')
 
     request=sdk_service_pb2.NotificationRegisterRequest(op=sdk_service_pb2.NotificationRegisterRequest.Create)
     create_subscription_response = stub.NotificationRegister(request=request, metadata=metadata)
@@ -409,12 +392,11 @@ if __name__ == '__main__':
     signal.signal(signal.SIGTERM, Exit_Gracefully)
     if not os.path.exists(stdout_dir):
         os.makedirs(stdout_dir, exist_ok=True)
-    log_filename = '{}/{{ agent_name }}.log'.format(stdout_dir)
-    logging.basicConfig(filename=log_filename, filemode='a',\
-                        format='%(asctime)s,%(msecs)d %(name)s %(levelname)s %(message)s',\
-                        datefmt='%H:%M:%S', level=logging.INFO)
-    handler = RotatingFileHandler(log_filename, maxBytes=3000000,backupCount=5)
-    logging.getLogger().addHandler(handler)
+    log_filename = f'{stdout_dir}/{agent_name}.log'
+    logging.basicConfig(
+      handlers=[RotatingFileHandler(log_filename, maxBytes=3000000,backupCount=5)],
+      format='%(asctime)s,%(msecs)03d %(name)s %(levelname)s %(message)s',
+      datefmt='%H:%M:%S', level=logging.INFO)
     logging.info("START TIME :: {}".format(datetime.datetime.now()))
     if Run():
         logging.info('Agent unregistered and agent routes withdrawed from dut')
