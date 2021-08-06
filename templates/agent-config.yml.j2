@@ -1,5 +1,5 @@
 # See example_config.yml for an explanation of all the accepted fields
-{{ agent_name }}:
+{{ agent_name | replace('-','_') }}:
    path: /etc/opt/srlinux/appmgr/
    launch-command: /etc/opt/srlinux/appmgr/{{ agent_name }}.sh
    search-command: python3 /etc/opt/srlinux/appmgr/{{ agent_name }}.py
