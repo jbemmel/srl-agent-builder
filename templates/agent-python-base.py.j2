@@ -34,7 +34,7 @@ from logging.handlers import RotatingFileHandler
 ############################################################
 ## Agent will start with this name
 ############################################################
-agent_name='{{ agent_name | replace('-','_') }}'
+agent_name='{{ agent_name }}'
 
 ############################################################
 ## Open a GRPC channel to connect to sdk_mgr on the dut

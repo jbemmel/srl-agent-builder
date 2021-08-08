@@ -38,7 +38,8 @@ def main(argv):
      template = env.get_template(t)
      ext = re.match("^.*(\..*)\.j2$",t)
      if ext:
-       filename = 'appmgr/' + agent_name + ext.groups()[0]
+       # SR Linux deploy-agent command only supports '_' in name, not '-'
+       filename = 'appmgr/' + agent_name.replace('-','_') + ext.groups()[0]
      else:
        filename = t[0:-3] # remove ".j2", Dockerfile and Makefile
      template.stream(agent_name=agent_name).dump( output_folder + '/' + filename )
